@@ -36,6 +36,59 @@ int last_state;
 int last_error;
 #endif
 
+//** Analog Inputの追加
+#include <lwm2mObjects/3202.h>
+KnownObjects::id3202::object analogInputObject;
+KnownObjects::id3202::instance analogInputInstance;
+
+KnownObjects::id3202::ApplicationTypeType applicationType;
+#define ANALOG_INPUT_INSTANCE_ID 0
+#define APPLICATION_TYPE "Random values"
+
+bool minmaxResetted = true;
+void updateAnalogValue() {
+    // アナログ値としてランダムな値を返す
+    // 実運用ではセンサーからの出力などを用いる
+    float value = (random(20000) - 10000) / 100.0f;
+    _v("value is %f\n", value);
+    analogInputInstance.AnalogInputCurrentValue = value;
+    analogInputObject.resChanged(CTX(context),
+                                 analogInputInstance.id,
+                                 (uint16_t)KnownObjects::id3202::RESID::AnalogInputCurrentValue);
+
+    if (minmaxResetted) {
+        _v("Min, Max update\n");
+        minmaxResetted = false;
+        analogInputInstance.MinMeasuredValue = value;
+        analogInputInstance.MaxMeasuredValue = value;
+        analogInputObject.resChanged(CTX(context),
+                                     analogInputInstance.id,
+                                     (uint16_t)KnownObjects::id3202::RESID::MinMeasuredValue);
+        analogInputObject.resChanged(CTX(context),
+                                     analogInputInstance.id,
+                                     (uint16_t)KnownObjects::id3202::RESID::MaxMeasuredValue);
+    } else {
+        if (value < analogInputInstance.MinMeasuredValue) {
+            _v("Min update\n");
+            analogInputInstance.MinMeasuredValue = value;
+            analogInputObject.resChanged(CTX(context),
+                                         analogInputInstance.id,
+                                         (uint16_t)KnownObjects::id3202::RESID::MinMeasuredValue);
+
+        } else if (value > analogInputInstance.MaxMeasuredValue) {
+            _v("Max update\n");
+            analogInputInstance.MaxMeasuredValue = value;
+            analogInputObject.resChanged(CTX(context),
+                                         analogInputInstance.id,
+                                         (uint16_t)KnownObjects::id3202::RESID::MaxMeasuredValue);
+        }
+    }
+}
+
+uint16_t count = 0;
+
+//**//
+
 void setup() {
 #ifdef M5STACK
     M5.begin(true, false, false, false);
@@ -49,6 +102,34 @@ void setup() {
     std::set_new_handler(lwm2m_reboot);
 
     setupDeviceInformation();
+
+    //using Executable = std::add_pointer<void(Lwm2mObjectInstance* instance, lwm2m_context_t* context)>::type;
+    analogInputObject.verifyWrite = [](KnownObjects::id3202::instance* instance, uint16_t resource_id) {
+        // SORACOM Inventoryからデータを受信したときの処理を実装する
+        if (instance->id == ANALOG_INPUT_INSTANCE_ID) {
+            // Objectスキーマでオペレーションが"W"riteで定義されているものを実装する
+		  // Writeリクエストを容認したときは true, 拒否するときは false を返す。
+            switch ((KnownObjects::id3202::RESID)resource_id) {
+                case KnownObjects::id3202::RESID::ApplicationType:
+                    _v("Not supported change application type: %s\n", (char*)instance->ApplicationType.data);
+				return false;
+            }
+        }
+
+        return false;
+    };
+    analogInputInstance.id = ANALOG_INPUT_INSTANCE_ID;
+    strcpy((char*)applicationType.data, APPLICATION_TYPE);
+    analogInputInstance.ApplicationType = applicationType;
+    analogInputInstance.MaxRangeValue = 100.0f;
+    analogInputInstance.MinRangeValue = -100.0f;
+    analogInputInstance.ResetMinandMaxMeasuredValues = [](Lwm2mObjectInstance*, lwm2m_context_t*) {
+        _v("Min, max histories are resetted\n");
+        minmaxResetted = true;
+    };
+
+    analogInputObject.addInstance(CTX(context), &analogInputInstance);
+    analogInputObject.registerObject(CTX(context), false);
 
     // Wait for network to connect
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -141,4 +222,11 @@ void loop() {
     context.process();
 
     delay(100);
+
+    // 100回に1度 (およそ10sec間隔) でアナログ値を送信する
+    if (++count > 100) {
+        _v("Update analog value\n");
+        count = 0;
+        updateAnalogValue();
+    }
 }
