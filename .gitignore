@@ -41,5 +41,3 @@
 # Custom Settings
 *.memo
 docs/**
-include/credentials.h
-include/wifi_config.h
