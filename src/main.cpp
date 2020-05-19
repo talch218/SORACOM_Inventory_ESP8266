@@ -37,7 +37,7 @@ int last_error;
 #endif
 
 //** Analog Inputの追加
-#include <lwm2mObjects/3202.h>
+#include "3202_custom.h"
 KnownObjects::id3202::object analogInputObject;
 KnownObjects::id3202::instance analogInputInstance;
 
@@ -49,7 +49,7 @@ bool minmaxResetted = true;
 void updateAnalogValue() {
     // アナログ値としてランダムな値を返す
     // 実運用ではセンサーからの出力などを用いる
-    float value = (random(20000) - 10000) / 100.0f;
+    double value = (random(20000) - 10000) / 100.0f;
     _v("value is %f\n", value);
     analogInputInstance.AnalogInputCurrentValue = value;
     analogInputObject.resChanged(CTX(context),
@@ -108,11 +108,11 @@ void setup() {
         // SORACOM Inventoryからデータを受信したときの処理を実装する
         if (instance->id == ANALOG_INPUT_INSTANCE_ID) {
             // Objectスキーマでオペレーションが"W"riteで定義されているものを実装する
-		  // Writeリクエストを容認したときは true, 拒否するときは false を返す。
+            // Writeリクエストを容認したときは true, 拒否するときは false を返す。
             switch ((KnownObjects::id3202::RESID)resource_id) {
                 case KnownObjects::id3202::RESID::ApplicationType:
                     _v("Not supported change application type: %s\n", (char*)instance->ApplicationType.data);
-				return false;
+                    return false;
             }
         }
 
@@ -223,10 +223,15 @@ void loop() {
 
     delay(100);
 
-    // 100回に1度 (およそ10sec間隔) でアナログ値を送信する
-    if (++count > 100) {
+    // サーバーとの接続が確立したらデータを送信し、Deep Sleepに入る
+    if (context.is_connected()) {
         _v("Update analog value\n");
-        count = 0;
         updateAnalogValue();
+
+        delay(200);
+        lwm2m_network_close(CTX(context));
+        ESP.deepSleep(10 * 1000 * 1000);
+
+	   delay(100);
     }
 }

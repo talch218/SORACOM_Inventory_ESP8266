@@ -1,7 +1,7 @@
 #pragma once
 // Automatically generated header file
 
-#include "lwm2m/objects.h"
+#include <lwm2m/objects.h>
 namespace KnownObjects {
 namespace id3202 {
 // Custom, overrideable types for Opaque and String resources
@@ -26,23 +26,23 @@ class instance : public Lwm2mObjectInstance {
 public:
 
     // 5600 - The current value of the analog input.
-    float AnalogInputCurrentValue;
+    double AnalogInputCurrentValue;
     
     // Optional resource
     // 5601 - The minimum value measured by the sensor since power ON or reset
-    float MinMeasuredValue;
+    double MinMeasuredValue;
     
     // Optional resource
     // 5602 - The maximum value measured by the sensor since power ON or reset
-    float MaxMeasuredValue;
+    double MaxMeasuredValue;
     
     // Optional resource
     // 5603 - The minimum value that can be measured by the sensor
-    float MinRangeValue;
+    double MinRangeValue;
     
     // Optional resource
     // 5604 - The maximum value that can be measured by the sensor
-    float MaxRangeValue;
+    double MaxRangeValue;
     
     // Optional resource
     // 5750 - The application type of the sensor or actuator as a string, for instance, “Air Pressure”
