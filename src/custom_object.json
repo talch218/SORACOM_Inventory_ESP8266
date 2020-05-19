@@ -1,0 +1,64 @@
+{
+	"id": 40001,
+	"name": "CustomObjectSample",
+	"description": "Sample object",
+	"multiple": false,
+	"mandatory": false,
+	"resources": {
+		"1": {
+			"id": 1,
+			"name": "Message",
+			"operations": "W",
+			"multiple": false,
+			"mandatory": true,
+			"type": "STRING",
+			"rangeEnumeration": "",
+			"units": "",
+			"description": "Printing message for device console"
+		},
+		"2": {
+			"id": 2,
+			"name": "LED",
+			"operations": "RW",
+			"multiple": false,
+			"mandatory": true,
+			"type": "BOOLEAN",
+			"rangeEnumeration": "",
+			"units": "",
+			"description": "Get or configure connected LED On/Off"
+		},
+		"3": {
+			"id": 3,
+			"name": "Analog Output",
+			"operations": "W",
+			"multiple": false,
+			"mandatory": true,
+			"type": "INTEGER",
+			"rangeEnumeration": "0-255",
+			"units": "",
+			"description": "Analog output without feedback"
+		},
+		"4": {
+			"id": 4,
+			"name": "Sensor Value",
+			"operations": "R",
+			"multiple": false,
+			"mandatory": true,
+			"type": "FLOAT",
+			"rangeEnumeration": "",
+			"units": "",
+			"description": "Sensor value"
+		},
+		"5": {
+			"id": 5,
+			"name": "Update",
+			"operations": "E",
+			"multiple": false,
+			"mandatory": true,
+			"type": "STRING",
+			"rangeEnumeration": "",
+			"units": "",
+			"description": "Update sensor value immediately"
+		}
+	}
+}

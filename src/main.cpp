@@ -36,64 +36,41 @@ int last_state;
 int last_error;
 #endif
 
-//** Analog Inputの追加
-#include "3202_custom.h"
-KnownObjects::id3202::object analogInputObject;
-KnownObjects::id3202::instance analogInputInstance;
+//** Custom Objectの利用
+#include "custom_object.h"
+id40001::object customObject;
+id40001::instance customInstance;
 
-KnownObjects::id3202::ApplicationTypeType applicationType;
-#define ANALOG_INPUT_INSTANCE_ID 0
-#define APPLICATION_TYPE "Random values"
+#define CUSTOM_INSTANCE_ID 0
+#define PIN_LED 2
 
-bool minmaxResetted = true;
-void updateAnalogValue() {
+bool led = false;
+int count = 0;
+
+void updateSensorValue() {
     // アナログ値としてランダムな値を返す
     // 実運用ではセンサーからの出力などを用いる
     double value = (random(20000) - 10000) / 100.0f;
     _v("value is %f\n", value);
-    analogInputInstance.AnalogInputCurrentValue = value;
-    analogInputObject.resChanged(CTX(context),
-                                 analogInputInstance.id,
-                                 (uint16_t)KnownObjects::id3202::RESID::AnalogInputCurrentValue);
-
-    if (minmaxResetted) {
-        _v("Min, Max update\n");
-        minmaxResetted = false;
-        analogInputInstance.MinMeasuredValue = value;
-        analogInputInstance.MaxMeasuredValue = value;
-        analogInputObject.resChanged(CTX(context),
-                                     analogInputInstance.id,
-                                     (uint16_t)KnownObjects::id3202::RESID::MinMeasuredValue);
-        analogInputObject.resChanged(CTX(context),
-                                     analogInputInstance.id,
-                                     (uint16_t)KnownObjects::id3202::RESID::MaxMeasuredValue);
-    } else {
-        if (value < analogInputInstance.MinMeasuredValue) {
-            _v("Min update\n");
-            analogInputInstance.MinMeasuredValue = value;
-            analogInputObject.resChanged(CTX(context),
-                                         analogInputInstance.id,
-                                         (uint16_t)KnownObjects::id3202::RESID::MinMeasuredValue);
-
-        } else if (value > analogInputInstance.MaxMeasuredValue) {
-            _v("Max update\n");
-            analogInputInstance.MaxMeasuredValue = value;
-            analogInputObject.resChanged(CTX(context),
-                                         analogInputInstance.id,
-                                         (uint16_t)KnownObjects::id3202::RESID::MaxMeasuredValue);
-        }
-    }
+    customInstance.SensorValue = value;
+    customObject.resChanged(CTX(context),
+                            customInstance.id,
+                            (uint16_t)id40001::ResourceId::SensorValue);
 }
 
-uint16_t count = 0;
+void changeLED() {
+    led = !led;
+    _v("LED %s\n", led ? "On" : "Off");
+    digitalWrite(PIN_LED, led);
+    customInstance.LED = led;
+    customObject.resChanged(CTX(context),
+                            customInstance.id,
+                            (uint16_t)id40001::ResourceId::LED);
+}
 
 //**//
 
 void setup() {
-#ifdef M5STACK
-    M5.begin(true, false, false, false);
-#endif
-
 #ifdef VERBOSE
     Serial.begin(76800);
 #endif
@@ -103,33 +80,39 @@ void setup() {
 
     setupDeviceInformation();
 
-    //using Executable = std::add_pointer<void(Lwm2mObjectInstance* instance, lwm2m_context_t* context)>::type;
-    analogInputObject.verifyWrite = [](KnownObjects::id3202::instance* instance, uint16_t resource_id) {
+    customObject.verifyWrite = [](id40001::instance* instance, uint16_t resource_id) {
         // SORACOM Inventoryからデータを受信したときの処理を実装する
-        if (instance->id == ANALOG_INPUT_INSTANCE_ID) {
+        if (instance->id == CUSTOM_INSTANCE_ID) {
             // Objectスキーマでオペレーションが"W"riteで定義されているものを実装する
             // Writeリクエストを容認したときは true, 拒否するときは false を返す。
-            switch ((KnownObjects::id3202::RESID)resource_id) {
-                case KnownObjects::id3202::RESID::ApplicationType:
-                    _v("Not supported change application type: %s\n", (char*)instance->ApplicationType.data);
-                    return false;
+            switch ((id40001::ResourceId)resource_id) {
+                case id40001::ResourceId::LED:
+                    led = !led;
+                    _v("LED %s\n", led ? "On" : "Off");
+                    digitalWrite(PIN_LED, led);
+                    return true;
+                case id40001::ResourceId::Message:
+                    _v("Receive message: %s\n", (char*)instance->Message.data);
+                    return true;
+                case id40001::ResourceId::AnalogOutput:
+                    _v("Analog output: %d\n", instance->AnalogOutput);
+				analogWrite(A0, instance->AnalogOutput);
+				return true;
             }
         }
 
         return false;
     };
-    analogInputInstance.id = ANALOG_INPUT_INSTANCE_ID;
-    strcpy((char*)applicationType.data, APPLICATION_TYPE);
-    analogInputInstance.ApplicationType = applicationType;
-    analogInputInstance.MaxRangeValue = 100.0f;
-    analogInputInstance.MinRangeValue = -100.0f;
-    analogInputInstance.ResetMinandMaxMeasuredValues = [](Lwm2mObjectInstance*, lwm2m_context_t*) {
-        _v("Min, max histories are resetted\n");
-        minmaxResetted = true;
+    customInstance.id = CUSTOM_INSTANCE_ID;
+    customInstance.Update = [](Lwm2mObjectInstance*, lwm2m_context_t*) {
+        _v("Update sensor value now\n");
+        updateSensorValue();
     };
 
-    analogInputObject.addInstance(CTX(context), &analogInputInstance);
-    analogInputObject.registerObject(CTX(context), false);
+    customObject.addInstance(CTX(context), &customInstance);
+    customObject.registerObject(CTX(context), false);
+    pinMode(PIN_LED, OUTPUT);
+    pinMode(A0, OUTPUT);
 
     // Wait for network to connect
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -223,15 +206,18 @@ void loop() {
 
     delay(100);
 
-    // サーバーとの接続が確立したらデータを送信し、Deep Sleepに入る
+    // サーバーとの接続が確立したら、初回にデータを送信し、500サイクル後 (およそ50秒後)Deep Sleepに入る
     if (context.is_connected()) {
-        _v("Update analog value\n");
-        updateAnalogValue();
+        if (count++ == 0) {
+            _v("Update analog value\n");
+            updateSensorValue();
+            delay(100);
+        }
+        if (count > 500) {
+            lwm2m_network_close(CTX(context));
+            ESP.deepSleep(10 * 1000 * 1000);
 
-        delay(200);
-        lwm2m_network_close(CTX(context));
-        ESP.deepSleep(10 * 1000 * 1000);
-
-	   delay(100);
+            delay(100);
+        }
     }
 }
